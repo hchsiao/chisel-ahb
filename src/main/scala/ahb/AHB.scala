@@ -63,7 +63,8 @@ object AHBParams{
 
   // Other
   val NumMaster = 2 // TODO: variable
-  val NumSlave = 3 // TODO: variable
+  val NumSlave = 2 // TODO: variable
+  val NumSlaveWithDefault = 1 + NumSlave // TODO: variable
 }
 
 class AHBMasterPort extends Bundle {
@@ -117,7 +118,7 @@ class AHBSlavePort extends Bundle {
 class AHB extends Module {
   val io = IO(new Bundle {
     val master = Vec(AHBParams.NumMaster, new AHBMasterPort())
-    val slave = Vec(AHBParams.NumSlave, new AHBSlavePort())
+    val slave = Vec(AHBParams.NumSlaveWithDefault, new AHBSlavePort())
   })
 
   // Master w/ lower idx has higher priority, default master = #0
@@ -146,6 +147,7 @@ class AHB extends Module {
   val granted_master = util.OHToUInt(grant)
 
   val abus_master = Reg(init = 0.U)
+  val abus_master_lock = Reg(init = 0.U)
   val abus_slave = decode_slave()
   val dbus_master = Reg(init = 0.U)
   val dbus_slave = Reg(init = 0.U)
@@ -164,25 +166,26 @@ class AHB extends Module {
   }
   when(dbus_ready) {
     abus_master := granted_master
+    abus_master_lock := io.master(granted_master).HLOCKx
     dbus_master := abus_master
     dbus_slave := abus_slave
   }
 
-  for(i <- 0 to (AHBParams.NumMaster-1)) {
+  for(i <- 0 until AHBParams.NumMaster) {
     io.master(i).HGRANTx := grant(i)
     io.master(i).HREADY  := io.slave(dbus_slave).HREADYx
-    io.master(i).HRESP   := Output(UInt(AHBParams.AHBRespBits))
-    io.master(i).HRDATA  := Output(UInt(AHBParams.AHBDataBits))
+    io.master(i).HRESP   := io.slave(dbus_slave).HRESP
+    io.master(i).HRDATA  := io.slave(dbus_slave).HRDATA
   }
-  for(i <- 0 to (AHBParams.NumSlave-1)) {
-    io.slave(i).HSELx     := Output(Bool())
+  for(i <- 0 until AHBParams.NumSlaveWithDefault) {
+    io.slave(i).HSELx     := util.UIntToOH(abus_slave)
     io.slave(i).HREADY    := io.slave(dbus_slave).HREADYx
-    io.slave(i).HADDR     := Output(UInt(AHBParams.AHBAddrBits))
-    io.slave(i).HWRITE    := Output(Bool())
-    io.slave(i).HTRANS    := Output(UInt(AHBParams.AHBTransBits))
-    io.slave(i).HSIZE     := Output(UInt(AHBParams.AHBSizeBits))
-    io.slave(i).HWDATA    := Output(UInt(AHBParams.AHBDataBits))
+    io.slave(i).HADDR     := io.master(abus_master).HADDR
+    io.slave(i).HWRITE    := io.master(abus_master).HWRITE
+    io.slave(i).HTRANS    := io.master(abus_master).HTRANS
+    io.slave(i).HSIZE     := io.master(abus_master).HSIZE
+    io.slave(i).HWDATA    := io.master(dbus_master).HWDATA
     io.slave(i).HMASTER   := granted_master
-    io.slave(i).HMASTLOCK := Output(Bool())
+    io.slave(i).HMASTLOCK := abus_master_lock
   }
 }

@@ -1,9 +1,9 @@
 CACHE_DIR  = test_run_dir
-VLOG       = AHB.v AHB-harness.v
+VLOG       = AHBSystem.v AHBSystem-harness.v
 VLOG_DEPS  = $(addprefix $(CACHE_DIR)/,$(VLOG))
 
 $(CACHE_DIR)/%.v:
-	-mkdir $(CACHE_DIR)
+	mkdir -p $(CACHE_DIR)
 	sbt 'testOnly ahb.AHBTester'
 	cp $(CACHE_DIR)/*/*.v $(CACHE_DIR)
 
