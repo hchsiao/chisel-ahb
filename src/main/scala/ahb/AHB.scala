@@ -124,19 +124,24 @@ class AHB extends Module {
   // Master w/ lower idx has higher priority, default master = #0
   def static_grant(i: Int): Bool = {
     var grant_raw = new Array[Bool](AHBParams.NumMaster)
-    var no_grant = true.B
+    grant_raw(1) = io.master(1).HBUSREQx
+    grant_raw(0) = io.master(0).HBUSREQx & ~grant_raw(1)
+    /*
     for(i <- 0 to (AHBParams.NumMaster-1)) {
       if(i == 0)
-        grant_raw(i) = io.master(i).HBUSREQx
+      else if(i == 1)
+      else if(i == 2)
+        grant_raw(i) = io.master(i).HBUSREQx & ~grant_raw(0)
       else
         grant_raw(i) = io.master(i).HBUSREQx & ~grant_raw(i-1)
       
       no_grant &= ~grant_raw(i)
     }
+    */
     if(i == 0)
-      grant_raw(0) | no_grant
+      grant_raw(0)
     else
-      grant_raw(i)
+      grant_raw(i) | ~grant_raw(0)
   }
 
   val grant = Wire(Vec(AHBParams.NumMaster, Bool()))
@@ -146,29 +151,34 @@ class AHB extends Module {
 
   val granted_master = util.OHToUInt(grant)
 
-  val abus_master = Reg(init = 0.U)
-  val abus_master_lock = Reg(init = 0.U)
-  val abus_slave = decode_slave()
-  val dbus_master = Reg(init = 0.U)
-  val dbus_slave = Reg(init = 0.U)
+  val abus_master_nxt = Wire(UInt(1.W))
+  val abus_master_lock_nxt = Wire(UInt(1.W))
+  val dbus_master_nxt = Wire(UInt(1.W))
+  val dbus_slave_nxt = Wire(UInt(2.W))
+  val abus_master = Reg(init = 0.U, next = abus_master_nxt) // TODO: using when
+  val abus_master_lock = Reg(init = 0.U, next = abus_master_lock_nxt)
+  val dbus_master = Reg(init = 0.U, next = dbus_master_nxt)
+  val dbus_slave = Reg(init = 0.U, next = dbus_slave_nxt)
   val dbus_ready = io.slave(dbus_slave).HREADYx
+  val abus_slave = decode_slave()
+  when(dbus_ready) {
+    abus_master_nxt := granted_master
+    abus_master_lock_nxt := io.master(granted_master).HLOCKx
+    dbus_master_nxt := abus_master
+    dbus_slave_nxt := abus_slave
+  }
+
   def decode_slave(): UInt = {
     val addr = io.master(abus_master).HADDR
     val slave = Wire(UInt(2.W)) // TODO: no magic
-    when(addr < 5.U) {
+    when(addr >= "x80000000".U) {
       slave := 0.U
-    } .elsewhen (addr < 10.U) {
+      } .elsewhen (addr >= "x20000000".U) {
       slave := 1.U
     } .otherwise {
       slave := 2.U
     }
     slave
-  }
-  when(dbus_ready) {
-    abus_master := granted_master
-    abus_master_lock := io.master(granted_master).HLOCKx
-    dbus_master := abus_master
-    dbus_slave := abus_slave
   }
 
   for(i <- 0 until AHBParams.NumMaster) {
@@ -178,7 +188,7 @@ class AHB extends Module {
     io.master(i).HRDATA  := io.slave(dbus_slave).HRDATA
   }
   for(i <- 0 until AHBParams.NumSlaveWithDefault) {
-    io.slave(i).HSELx     := util.UIntToOH(abus_slave)
+    io.slave(i).HSELx     := util.UIntToOH(abus_slave)(i)
     io.slave(i).HREADY    := io.slave(dbus_slave).HREADYx
     io.slave(i).HADDR     := io.master(abus_master).HADDR
     io.slave(i).HWRITE    := io.master(abus_master).HWRITE

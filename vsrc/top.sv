@@ -14,29 +14,60 @@ module top(
 );
   // TOP IO
   //OUT
-  wire [20:0] async_data_dw_addr;
+  wire [31:0] async_data_dw_addr;
   wire [31:0] async_data_dw_data;
   wire [3:0] async_data_dw_mask; // TODO: relavent?
   wire  async_data_dw_en;
-  wire [20:0] async_data_dataInstr_0_addr;
-  wire [20:0] async_data_dataInstr_1_addr;
-  assign DM_in = async_data_dw_data;
-  assign DM_write = async_data_dw_en;
-  assign DM_enable = 1;
-  assign DM_address = async_data_dw_en ? async_data_dw_addr : async_data_dataInstr_0_addr;
-  assign IM_address = async_data_dataInstr_1_addr;
-  assign IM_enable = 1;
+  wire [31:0] async_data_dataInstr_0_addr;
+  wire [31:0] async_data_dataInstr_1_addr;
   //IN
   wire [31:0] async_data_dataInstr_0_data;
   wire [31:0] async_data_dataInstr_1_data;
-  assign async_data_dataInstr_0_data = DM_out;
-  assign async_data_dataInstr_1_data = IM_out;
   // TOP IO
+
+  // BUS
+  wire        io_icore_valid = 1;
+  wire        io_icore_ready;
+  wire        io_dcore_valid;
+  wire        io_dcore_ready;
+  wire istall = io_icore_valid & (~io_icore_ready);
+  wire dstall = io_dcore_valid & (~io_dcore_ready);
+  wire [31:0] iaddr;
+  assign IM_address = iaddr - 32'h80000000;
+  AHBSystem ahb (
+    .clock(clk),
+    .reset(rst),
+    .io_icore_valid(io_icore_valid),
+    .io_icore_stall(istall | dstall),
+    .io_icore_write(0),
+    .io_icore_addr(async_data_dataInstr_1_addr),
+    .io_icore_wdata(0),
+    .io_icore_ready(io_icore_ready),
+    .io_icore_rdata(async_data_dataInstr_1_data),
+    .io_dcore_valid(io_dcore_valid),
+    .io_dcore_stall(istall | dstall),
+    .io_dcore_write(async_data_dw_en),
+    .io_dcore_addr(async_data_dw_en ? async_data_dw_addr : async_data_dataInstr_0_addr),
+    .io_dcore_wdata(async_data_dw_data),
+    .io_dcore_ready(io_dcore_ready),
+    .io_dcore_rdata(async_data_dataInstr_0_data),
+    .io_imem_cen(IM_enable),
+    .io_imem_wen(IM_write),
+    .io_imem_A(iaddr),
+    .io_imem_Q(IM_out),
+    .io_dmem_cen(DM_enable),
+    .io_dmem_wen(DM_write),
+    .io_dmem_A(DM_address),
+    .io_dmem_D(DM_in),
+    .io_dmem_Q(DM_out)
+  );
+  // BUS
 
   // CPU IO
   wire [31:0] io_imem_req_bits_addr;
   wire [31:0] io_imem_resp_bits_data;
   wire        io_dmem_req_valid;
+  assign io_dcore_valid = io_dmem_req_valid;
   wire [31:0] io_dmem_req_bits_addr;
   wire [31:0] io_dmem_req_bits_data;
   wire        io_dmem_req_bits_fcn;
@@ -47,6 +78,7 @@ module top(
   CPU CPU1(
     .clock(clk),
     .reset(rst),
+    .stall(istall | dstall),
     .io_imem_req_bits_addr(io_imem_req_bits_addr),
     .io_imem_resp_bits_data(io_imem_resp_bits_data),
     .io_dmem_req_valid(io_dmem_req_valid),
@@ -141,12 +173,12 @@ module top(
   assign io_core_ports_0_resp_valid = io_core_ports_0_req_valid;
   assign io_core_ports_0_resp_bits_data = _T_232;
   assign io_core_ports_1_resp_bits_data = async_data_dataInstr_1_data;
-  assign async_data_dw_addr = _T_244[20:0];
+  assign async_data_dw_addr = _T_244;
   assign async_data_dw_data = _T_241[31:0];
   assign async_data_dw_mask = _T_255[3:0];
   assign async_data_dw_en = io_core_ports_0_req_bits_fcn;
-  assign async_data_dataInstr_0_addr = io_core_ports_0_req_bits_addr[20:0];
-  assign async_data_dataInstr_1_addr = io_core_ports_1_req_bits_addr[20:0];
+  assign async_data_dataInstr_0_addr = io_core_ports_0_req_bits_addr;
+  assign async_data_dataInstr_1_addr = io_core_ports_1_req_bits_addr;
   // end MEM
 
 endmodule

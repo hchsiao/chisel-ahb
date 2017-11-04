@@ -1,8 +1,16 @@
 `timescale 1ns/10ps
 `define CYCLE 10
 `include "top.sv"
+`ifdef syn
+  `include "CPU_syn.v"
+  `include "/usr/cad/cell_based_design_kit/CBDK018_UMC_Faraday_v1.0/CIC/Verilog/fsa0m_a_generic_core_21.lib"
+  `timescale 1ns/10ps
+`else
+  `include "CPU.sv"
+`endif
 `include "IM.sv"
 `include "DM.sv"
+`include "AHBSystem.v"
 module top_tb;
 
   logic clk;
@@ -54,89 +62,41 @@ module top_tb;
     .DM_out(DM_out)
   );
 
+  `ifdef syn
+    initial $sdf_annotate("CPU_syn.sdf", TOP.CPU1);
+  `endif
 
   initial
   begin
     clk = 0; rst = 1;
     #(`CYCLE) rst = 0;
     `ifdef prog0
-  		//verification default program
-  		$readmemh("./prog0/IM_data.dat",IM1.mem_data);
-  		$readmemh("./prog0/DM_data.dat",DM1.mem_data); 
-			gf=$fopen("./prog0/golden.dat","r");
-			i=0;
-			while(!$feof(gf)) begin
-				$fscanf(gf,"%d\n",GOLDEN[i]);
-				i=i+1;
-			end
-			$fclose(gf);
+      //verification default program
+      $readmemh("./prog0/IM_data.dat",IM1.mem_data);
+      $readmemh("./prog0/DM_data.dat",DM1.mem_data); 
+      gf=$fopen("./prog0/golden.dat","r");
+      i=0;
+      while(!$feof(gf)) begin
+        $fscanf(gf,"%d\n",GOLDEN[i]);
+        i=i+1;
+      end
+      $fclose(gf);
       $display("Running prog0"); 
-    `elsif prog1
-  			$readmemh("./prog1/IM_data.dat",IM1.mem_data);
-  			$readmemh("./prog1/DM_data.dat",DM1.mem_data);    
-    `elsif prog2
-  			$readmemh("./prog2/IM_data.dat",IM1.mem_data);
-			$readmemh("./prog2/DM_data.dat",DM1.mem_data);   
-    `elsif prog3
-  			$readmemh("./prog3/IM_data.dat",IM1.mem_data);
-			$readmemh("./prog3/DM_data.dat",DM1.mem_data);   
-    `elsif prog4
-  			$readmemh("./prog4/IM_data.dat",IM1.mem_data);
-			$readmemh("./prog4/DM_data.dat",DM1.mem_data);   
-    `elsif prog5
-  			$readmemh("./prog5/IM_data.dat",IM1.mem_data);
-			$readmemh("./prog5/DM_data.dat",DM1.mem_data);   
     `endif
     #(`CYCLE*10000)
     $display( "\nDone\n" );
-    for (int i=0;i<10;i=i+1 ) 
-    begin
-      $display( "DM[%2d] = %h",i,DM1.mem_data[i]); 
-    end
     err=0;
     `ifdef prog0
-      for (int i=1;i<32;i=i+1 ) begin
-        if (TOP.CPU1.RF1.mem[i]!=GOLDEN[i]) begin
-          $display("register[%2d]=%d, expect=%d",i,TOP.CPU1.RF1.mem[i],GOLDEN[i]); 
+      for (int i=1;i<32;i=i+1 ) begin 
+        if (DM1.mem_data[i]!=GOLDEN[i]) begin
+          $display("DM[%2d]=%d, expect=%d",i,DM1.mem_data[i],GOLDEN[i]); 
           err=err+1;
         end
         else begin
-          $display("register[%2d]=%d, pass",i,TOP.CPU1.RF1.mem[i]);
+          $display("DM[%2d]=%d, pass",i,DM1.mem_data[i]);
         end
       end
       result(err);
-    `else
-      for (int i=1;i<32;i=i+1) $display("register[%2d]=%d",i,TOP.CPU1.RF1.mem[i]);
-      $display("");
-      `ifdef prog2
-        if (DM1.mem_data[3] != 32'h0000_009E) begin
-          $display("DM[3]=%h, expect=0000_009E",DM1.mem_data[0]);
-          err=err+1;
-        end
-        result(err);
-      `elsif prog3
-        if (DM1.mem_data[3] != 32'hFFFF_E019) begin
-          $display("DM[3]=%h, expect=FFFF_E019",DM1.mem_data[0]);
-          err=err+1;
-        end
-        result(err);
-      `elsif prog4
-        if (DM1.mem_data[3] != 32'hFFFF_E400) begin
-          $display("DM[3]=%h, expect=FFFF_E400",DM1.mem_data[0]);
-          err=err+1;
-        end
-        result(err);
-      `elsif prog5
-        if (DM1.mem_data[3] != 32'h0000_0010) begin
-          $display("DM[3]=%h, expect=0000_0010",DM1.mem_data[0]);
-          err=err+1;
-        end
-        if (DM1.mem_data[4] != 32'h0000_0006) begin
-          $display("DM[4]=%h, expect=0000_0006",DM1.mem_data[1]);
-          err=err+1;
-        end
-        result(err);
-      `endif
     `endif
     $finish;
   end
@@ -147,7 +107,7 @@ module top_tb;
     $fsdbDumpvars(0, top_tb);
     #1000000 $finish;
   end
-  
+
   task result;
     input integer err;
     begin

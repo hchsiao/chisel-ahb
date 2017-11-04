@@ -9,10 +9,11 @@ module DM
   input DM_enable,
   input [31:0] DM_in,
   input [15:0] DM_address,
+  output DM_stall,
   output [31:0] DM_out
     );
 
-   localparam ADDR_WIDTH = $clog2(NUM_BYTES);
+   localparam ADDR_WIDTH = 32;
    localparam MASK_WIDTH = DATA_WIDTH >> 3;
 
     //input [ADDR_WIDTH-1:0] hw_addr;
@@ -44,6 +45,25 @@ module DM
 
    //reg [7:0] 		mem [0:NUM_BYTES-1];
   logic [31:0] mem_data [0:65535];
+  reg busy;
+  reg reading;
+  always@(posedge clk) begin
+    if(rst) begin
+      busy <= 0;
+      reading <= 0;
+    end else begin
+      if((~busy) & (~reading))
+        busy <= DM_enable;
+      else if((~busy) & reading)
+        busy <= 0;
+      else // 1T busy
+        busy <= 0;
+
+      reading <= reading ? busy : DM_enable;
+    end
+  end
+  wire ready = (~busy) & reading;
+  assign DM_stall = (~ready) & DM_enable;
    
   genvar i;
   generate
@@ -60,7 +80,7 @@ module DM
           end
         end
       end
-      always @* begin
+      always @(posedge clk) begin
         //hr_data[i*8 +: 8] = mem[hr_addr + i];
         dataInstr_0_data[i*8 +: 8] = mem_data[dataInstr_0_addr][i*8 +: 8];
         dataInstr_1_data[i*8 +: 8] = mem_data[dataInstr_1_addr][i*8 +: 8];

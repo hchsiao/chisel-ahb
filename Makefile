@@ -8,7 +8,10 @@ $(CACHE_DIR)/%.v:
 	cp $(CACHE_DIR)/*/*.v $(CACHE_DIR)
 
 all: $(VLOG_DEPS)
-	ls $(CACHE_DIR)
+
+.PHONY: test
+test: all
+	cd test ; ncverilog test.sv +access+r +sv +incdir+../test_run_dir +incdir+../vsrc +define+prog0
 
 .PHONY: clean
 clean:

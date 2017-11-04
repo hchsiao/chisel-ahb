@@ -14,6 +14,7 @@
 module CtlPath(
   input         clock,
   input         reset,
+  input         ext_stall,
   input         io_dmem_resp_valid,
   input  [31:0] io_dat_dec_inst,
   input         io_dat_exe_br_eq,
@@ -1383,8 +1384,8 @@ module CtlPath(
   assign io_ctl_fencei = _T_1166;
   assign io_ctl_pipeline_kill = _T_1096;
   assign io_ctl_mem_exception = _T_1168;
-  assign stall = _T_1154;
-  assign full_stall = _T_1162;
+  assign stall = _T_1154 | ext_stall;
+  assign full_stall = _T_1162 | ext_stall;
 `ifdef RANDOMIZE
   integer initvar;
   initial begin
@@ -4113,6 +4114,7 @@ endmodule
 module CPU(
   input         clock,
   input         reset,
+  input         stall,
   output [31:0] io_imem_req_bits_addr,
   input  [31:0] io_imem_resp_bits_data,
   output        io_dmem_req_valid,
@@ -4134,7 +4136,9 @@ module CPU(
   wire  c_io_dat_mem_ctrl_dmem_val;
   wire  c_io_dat_csr_eret;
   wire  c_io_ctl_dec_stall;
+  wire  c_io_ctl_dec_stall_old;
   wire  c_io_ctl_full_stall;
+  wire  c_io_ctl_full_stall_old;
   wire [1:0] c_io_ctl_exe_pc_sel;
   wire [3:0] c_io_ctl_br_type;
   wire  c_io_ctl_if_kill;
@@ -4179,6 +4183,7 @@ module CPU(
   CtlPath c (
     .clock(c_clock),
     .reset(c_reset),
+    .ext_stall(stall),
     .io_dmem_resp_valid(c_io_dmem_resp_valid),
     .io_dat_dec_inst(c_io_dat_dec_inst),
     .io_dat_exe_br_eq(c_io_dat_exe_br_eq),
@@ -4187,8 +4192,8 @@ module CPU(
     .io_dat_exe_br_type(c_io_dat_exe_br_type),
     .io_dat_mem_ctrl_dmem_val(c_io_dat_mem_ctrl_dmem_val),
     .io_dat_csr_eret(c_io_dat_csr_eret),
-    .io_ctl_dec_stall(c_io_ctl_dec_stall),
-    .io_ctl_full_stall(c_io_ctl_full_stall),
+    .io_ctl_dec_stall(c_io_ctl_dec_stall_old),
+    .io_ctl_full_stall(c_io_ctl_full_stall_old),
     .io_ctl_exe_pc_sel(c_io_ctl_exe_pc_sel),
     .io_ctl_br_type(c_io_ctl_br_type),
     .io_ctl_if_kill(c_io_ctl_if_kill),
@@ -4916,7 +4921,7 @@ module CPU(
   assign io_dat_mem_ctrl_dmem_val = mem_reg_ctrl_mem_val;
   assign io_dat_csr_eret = csr_io_eret;
   assign if_pc_next = _GEN_1;
-  assign exe_brjmp_target = _T_378;
+  assign exe_brjmp_target = _T_378 - 4;
   assign exe_jump_reg_target = exe_adder_out;
   assign exception_target = csr_io_evec;
   assign regfile_io_rs1_addr = dec_rs1_addr;
@@ -5084,7 +5089,7 @@ module CPU(
 `endif // RANDOMIZE
   always @(posedge clock) begin
     if (reset) begin
-      if_reg_pc <= 32'h00000000; // inject: START_ADDR=0
+      if_reg_pc <= 32'h80000000; // inject: START_ADDR=0x80000000
     end else begin
       if (_T_165) begin
         if_reg_pc <= if_pc_next;
@@ -5396,7 +5401,9 @@ module CPU(
   assign c_io_dat_csr_eret = d_io_dat_csr_eret;
   assign c_clock = clock;
   assign c_reset = reset;
+  assign c_io_ctl_dec_stall = c_io_ctl_dec_stall_old | stall;
   assign d_io_ctl_dec_stall = c_io_ctl_dec_stall;
+  assign c_io_ctl_full_stall = c_io_ctl_full_stall_old | stall;
   assign d_io_ctl_full_stall = c_io_ctl_full_stall;
   assign d_io_ctl_exe_pc_sel = c_io_ctl_exe_pc_sel;
   assign d_io_ctl_br_type = c_io_ctl_br_type;
